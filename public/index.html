@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+        <meta charset="utf-8">
+        <title>Ar Navigation demo</title>
+        <link rel="stylesheet" type="text/css" href="./css/map.css">    
+    </head>
+    
+    <body>
+        <input id="current-input" class="controls" type="text" placeholder="Enter">
+        <input id="destination-input" class="controls" type="text" placeholder="Enter">
+
+        <div id="mode-selector" class="controls">
+            <input type="radio" name="type" id="changemode-walking" checked="checked">
+            <label for="changemode-walking">Walking</label>
+          
+            <input type="radio" name="type" id="changemode-transit">
+            <label for="changemode-transit">Transit</label>
+        
+            <input type="radio" name="type" id="changemode-driving">
+            <label for="changemode-driving">Driving</label>
+        </div>
+
+        <div id="right-panel"></div>
+        <div id="map"></div>
+
+        <script type="text/javascript" src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/4.8.1/firebase.js"></script>
+                
+        <script>
+        var auth, database, userInfo;
+
+        // Initialize Firebase
+        var config = {
+            apiKey: "AIzaSyC3sc4xya8bvMizV8jEu39D4OU8k6O7yGw",
+            authDomain: "arnaviprototype.firebaseapp.com",
+            databaseURL: "https://arnaviprototype.firebaseio.com",
+            projectId: "arnaviprototype",
+            storageBucket: "arnaviprototype.appspot.com",
+            messagingSenderId: "793977725079"
+        };
+        firebase.initializeApp(config);
+
+        auth = firebase.auth();
+        database = firebase.database();
+        var authProvider = new firebase.auth.GoogleAuthProvider();
+
+        auth.onAuthStateChanged(function(user) {
+            if (user) {
+                console.log('success');
+                console.log(user);
+
+                userInfo = user;
+
+                initMap();
+            } else {
+                auth.signInWithPopup(authProvider);
+            }
+        });
+
+        function initMap() {
+            var targetRef = database.ref('targets/'+ userInfo.uid);
+            
+            targetRef.on('child_changed', function(data) {
+                targetRef.once('value').then(function(snapshot){
+                    console.log(snapshot.val().target);
+
+                    $("#current-input").val(snapshot.val().target);
+                    $("#current-input").focus();
+                })
+            })
+
+            var map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 7,
+                center: {lat: -33.8688, lng: 151.2195}
+            });
+            new AutocompleteDirectionsHandler(map);
+        }
+        
+        function AutocompleteDirectionsHandler(map) {
+            this.map = map;
+            this.originPlaceId = null;
+            this.destinationPlaceId = null;
+            this.travelMode = 'WALKING';
+
+            var originInput = document.getElementById('current-input');
+            var destinationInput = document.getElementById('destination-input');
+            var modeSelector = document.getElementById('mode-selector');
+            this.directionsService = new google.maps.DirectionsService;
+            this.directionsDisplay = new google.maps.DirectionsRenderer;
+            
+            this.directionsDisplay.setMap(map);
+            this.directionsDisplay.setPanel(document.getElementById('right-panel'));
+    
+            var originAutocomplete = new google.maps.places.Autocomplete(
+                originInput, {placeIdOnly: true});
+            var destinationAutocomplete = new google.maps.places.Autocomplete(
+                destinationInput, {placeIdOnly: true});
+    
+            this.setupClickListener('changemode-walking', 'WALKING');
+            this.setupClickListener('changemode-transit', 'TRANSIT');
+            this.setupClickListener('changemode-driving', 'DRIVING');
+    
+            this.setupPlaceChangedListener(originAutocomplete, 'ORIG');
+            this.setupPlaceChangedListener(destinationAutocomplete, 'DEST');
+    
+            this.map.controls[google.maps.ControlPosition.TOP_LEFT].push(originInput);
+            this.map.controls[google.maps.ControlPosition.TOP_LEFT].push(destinationInput);
+            this.map.controls[google.maps.ControlPosition.TOP_LEFT].push(modeSelector);
+        }
+
+        AutocompleteDirectionsHandler.prototype.setupClickListener = function(id, mode) {
+            var radioButton = document.getElementById(id);
+            var me = this;
+            
+            radioButton.addEventListener('click', function() {
+                me.travelMode = mode;
+                me.route();
+            });
+        };
+
+        AutocompleteDirectionsHandler.prototype.setupPlaceChangedListener = function(autocomplete, mode) {
+            var me = this;
+            
+            autocomplete.bindTo('bounds', this.map);
+            autocomplete.addListener('place_changed', function() {
+                var place = autocomplete.getPlace();
+                
+                if (!place.place_id) {
+                    window.alert("Please select an option from the dropdown list.");
+                    return;
+                }
+                if (mode === 'ORIG') {
+                    me.originPlaceId = place.place_id;
+                } else {
+                    me.destinationPlaceId = place.place_id;
+                }
+                me.route();
+            });
+        };
+        
+        AutocompleteDirectionsHandler.prototype.route = function() {
+            if (!this.originPlaceId || !this.destinationPlaceId) {
+                return;
+            }
+            var me = this;
+            
+            this.directionsService.route({
+                origin: {'placeId': this.originPlaceId},
+                destination: {'placeId': this.destinationPlaceId},
+                travelMode: this.travelMode
+            }, function(response, status) {
+                if (status === 'OK') {
+                    me.directionsDisplay.setDirections(response);
+                } else {
+                    window.alert('Directions request failed due to ' + status);
+                }
+            });
+        };
+      
+        
+        </script>
+        <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCwolkEBNqx_0saprSXXx82mm5YZ8b-t_k&libraries=places"async defer></script>
+    </body>
+</html>
